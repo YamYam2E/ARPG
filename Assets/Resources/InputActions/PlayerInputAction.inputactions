@@ -1,5 +1,5 @@
 {
-    "name": "InputAction_Keyboard",
+    "name": "PlayerInputAction",
     "maps": [
         {
             "name": "gameplay",
@@ -27,6 +27,15 @@
                     "name": "run",
                     "type": "Button",
                     "id": "fc4eadd9-e4bf-49a4-b597-b55140c3a595",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "attack",
+                    "type": "Button",
+                    "id": "bb2856a4-893c-42d6-bd28-6763b00892e2",
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "",
@@ -108,6 +117,17 @@
                     "processors": "",
                     "groups": "",
                     "action": "run",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "9318a0f0-fba9-4fc6-af7a-19b0ab753925",
+                    "path": "<Mouse>/leftButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "attack",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

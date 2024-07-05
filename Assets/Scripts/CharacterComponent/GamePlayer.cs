@@ -3,41 +3,42 @@ using UnityEngine.InputSystem;
 
 namespace CharacterComponent
 {
-    public class InputComponent : MonoBehaviour
+    [RequireComponent(typeof(CharacterController))]
+    [RequireComponent(typeof(Animator))]
+    [RequireComponent(typeof(InputEventHandler))]
+    public class GamePlayer : MonoBehaviour
     {
-        public Animator animator;
-        public InputActionAsset actionAsset;
-        public CharacterController characterController;
-        
-        private InputAction moveAction;
-        private InputAction runAction;
-        private GameObject mainCamera;
+        [SerializeField] private Animator animator;
+        [SerializeField] private InputEventHandler inputEventHandler;
+        [SerializeField] private CharacterController characterController;
         
         private const float RotationSmoothTime = 0.12f;
         private const float SpeedChangeRate = 10f;
+        private const float TerminalVelocity = 53.0f;
+        
+        private readonly int movementSpeedAnimationID = Animator.StringToHash("MovementSpeed");
+        private readonly int JumpAnimationID = Animator.StringToHash("Jump");
+        private readonly int GroundAnimationID = Animator.StringToHash("IsGround");
+        private readonly int AttackingAnimationID = Animator.StringToHash("Attack");
+        private readonly int FallingAnimationID = Animator.StringToHash("Falling");
+       
+        private GameObject mainCamera;
         
         private float rotationVelocity;
         private float targetRotation;
         private float movementSpeed;
         private float animationBlend;
-        
         private float verticalVelocity;
-        private float terminalVelocity = 53.0f;
         
-        // timeout deltatime
         private float jumpTimeoutDelta;
         private float fallTimeoutDelta;
-        
-        private int movementSpeedAnimationID;
-        private int jumpAnimationID;
-        private int groundAnimationID;
-        private int fallingAnimationID;
-        
+
         private bool isGrounded;
         private bool isJumping;
+        private bool isAttacking;
         
         [Tooltip("Useful for rough ground")]
-        public float GroundedOffset = -0.1f;
+        public float GroundedOffset = -0.18f;
         
         [Space(10)]
         [Tooltip("")]
@@ -50,45 +51,29 @@ namespace CharacterComponent
         
         [Space(10)]
         [Tooltip("Time required to pass before being able to jump again. Set to 0f to instantly jump again")]
-        public float JumpTimeout = 0.50f;
+        public float JumpTimeout = 0.45f;
 
         [Tooltip("Time required to pass before entering the fall state. Useful for walking down stairs")]
         public float FallTimeout = 0.15f;
         
         [Tooltip("The character uses its own gravity value. The engine default is -9.81f")]
-        public float Gravity = -15.0f;
+        public float Gravity = -17.0f;
         
         [Space(10)]
         [Tooltip("The height the player can jump")]
-        public float JumpHeight = 0.8f;
+        public float JumpHeight = 1.0f;
         
         private void Awake()
         {
-            // get a reference to our main camera
             if (mainCamera == null)
-            {
                 mainCamera = GameObject.FindGameObjectWithTag("MainCamera");
-            }
-        }
-        
-        private void Start()
-        {
-            // find the "move" action, and keep the reference to it, for use in Update
-            moveAction = actionAsset.FindActionMap("gameplay").FindAction("move");
-
-            // for the "run" action, we add a callback method for when it is performed
-            runAction = actionAsset.FindActionMap("gameplay").FindAction("run");
-            
-            // for the "jump" action, we add a callback method for when it is performed
-            actionAsset.FindActionMap("gameplay").FindAction("jump").performed += OnJump;
-            
-            movementSpeedAnimationID = Animator.StringToHash("MovementSpeed");
-            jumpAnimationID = Animator.StringToHash("Jump");
-            groundAnimationID = Animator.StringToHash("IsGround");
         }
         
         private void FixedUpdate()
         {
+            if (isAttacking)
+                return;
+            
             JumpAndGravity();
             
             GroundedCheck();
@@ -104,8 +89,8 @@ namespace CharacterComponent
                 fallTimeoutDelta = FallTimeout;
 
                 // update animator if using character
-                animator.SetBool(jumpAnimationID, false);
-                animator.SetBool(fallingAnimationID, false);
+                animator.SetBool(JumpAnimationID, false);
+                animator.SetBool(FallingAnimationID, false);
 
                 // stop our velocity dropping infinitely when grounded
                 if (verticalVelocity < 0.0f)
@@ -120,7 +105,7 @@ namespace CharacterComponent
                     verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * Gravity);
 
                     // update animator if using character
-                    animator.SetBool(jumpAnimationID, true);
+                    animator.SetBool(JumpAnimationID, true);
                 }
 
                 // jump timeout
@@ -142,7 +127,7 @@ namespace CharacterComponent
                 else
                 {
                     // update animator if using character
-                    animator.SetBool(fallingAnimationID, true);
+                    animator.SetBool(FallingAnimationID, true);
                 }
 
                 // if we are not grounded, do not jump
@@ -150,7 +135,7 @@ namespace CharacterComponent
             }
 
             // apply gravity over time if under terminal (multiply by delta time twice to linearly speed up over time)
-            if (verticalVelocity < terminalVelocity)
+            if (verticalVelocity < TerminalVelocity)
             {
                 verticalVelocity += Gravity * Time.deltaTime;
             }
@@ -162,7 +147,7 @@ namespace CharacterComponent
             var spherePosition = new Vector3(transform.position.x, transform.position.y - GroundedOffset, transform.position.z);
             isGrounded = Physics.CheckSphere(spherePosition, 0.2f, LayerMask.GetMask("Default"));
 
-            animator.SetBool(groundAnimationID, isGrounded);
+            animator.SetBool(GroundAnimationID, isGrounded);
         }
         
         private void OnDrawGizmosSelected()
@@ -180,20 +165,20 @@ namespace CharacterComponent
 
         private void OnMove()
         {
-            if (moveAction == null || runAction == null)
-                return;
-
-            var targetSpeed = runAction.IsPressed() ? RunSpeed : WalkSpeed;
+            var targetSpeed = inputEventHandler.IsRun ? RunSpeed : WalkSpeed;
+            var moveVector = inputEventHandler.MoveValue;
             
-            // our update loop polls the "move" action value each frame
-            var moveVector = moveAction.ReadValue<Vector2>();
-
-            if (moveVector == Vector2.zero)
+            if ( moveVector == Vector2.zero)
                 targetSpeed = 0f;
             
             const float speedOffset = 0.1f;
-            var currentHorizontalSpeed = new Vector3(characterController.velocity.x, 0.0f, characterController.velocity.z).magnitude;
             
+            var currentHorizontalSpeed = 
+                new Vector3(characterController.velocity.x, 0.0f, characterController.velocity.z).magnitude;
+            
+            /*
+             * 새로운 유니티 Input System은 Keyboard 입력에 대한 analogMovement 기능을 제공하지 않는다.
+             */
             var inputMagnitude = /*moveAction.analogMovement ? _input.move.magnitude :*/ 1f;
             
             // accelerate or decelerate to target speed
@@ -245,23 +230,27 @@ namespace CharacterComponent
             animator.SetFloat(movementSpeedAnimationID, animationBlend);
         }
         
-        private void OnJump(InputAction.CallbackContext context)
-        {
-            // this is the "jump" action callback method
-            if (isJumping)
-                return;
-
-            isJumping = true;
-            // animator.SetBool(jumpAnimationID, true);
-        }
         
-        private void OnEnable()
+
+        private void OnAttackStart()
         {
-            actionAsset.FindActionMap("gameplay").Enable();
+            Debug.Log("OnAttackStart");
+            isAttacking = true;
         }
-        private void OnDisable()
+
+        private void OnAttackFinish()
         {
-            actionAsset.FindActionMap("gameplay").Disable();
+            Debug.Log("OnAttackFinish");
+            isAttacking = false;
+        }
+
+        private void OnAttack(InputAction.CallbackContext context)
+        {
+            if (isAttacking)
+                return;
+            
+            isAttacking = true;
+            animator.SetTrigger(AttackingAnimationID);
         }
     }
 }
