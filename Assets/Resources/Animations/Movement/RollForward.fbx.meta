@@ -31,7 +31,9 @@ ModelImporter:
       will be discarded.\n\t'Ankle_R' has translation animation that will be discarded.\n\t'Toes_R'
       has translation animation that will be discarded.\n\t'Knee_L' has translation
       animation that will be discarded.\n\t'Ankle_L' has translation animation that
-      will be discarded.\n\t'Toes_L' has translation animation that will be discarded.\n"
+      will be discarded.\n\t'Toes_L' has translation animation that will be discarded.\nEvent
+      OnRollingStart has a time (0.000000) outside the clip's valid range (0.000000..1.433334).
+      It will never be fired"
     animationRetargetingWarnings: 
     animationDoRetargetingWarnings: 0
     importAnimatedCustomProperties: 0
@@ -48,8 +50,8 @@ ModelImporter:
       name: human_male_roll_01
       takeName: human_male_roll_01
       internalID: 0
-      firstFrame: 2
-      lastFrame: 48
+      firstFrame: 5
+      lastFrame: 36
       wrapMode: 0
       orientationOffsetY: 0
       level: 0

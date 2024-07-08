@@ -66,6 +66,7 @@ namespace CharacterComponent
         
         private float _rotationVelocity;
         private float _targetRotation;
+        private float _rollingSpeed;
         private float _movementSpeed;
         private float _animationBlend;
         private float _verticalVelocity;
@@ -80,6 +81,8 @@ namespace CharacterComponent
         
         private int _attackCombo;
         
+        private Vector2 lastMoveVector;
+        
         private void Awake()
         {
             if (_mainCamera == null)
@@ -92,8 +95,14 @@ namespace CharacterComponent
         
         private void FixedUpdate()
         {
-            if (_isAttacking || _isRolling)
+            if (_isAttacking)
                 return;
+
+            if (_isRolling)
+            {
+                OnMoveForRolling();
+                return;
+            }
             
             JumpAndGravity();
             GroundedCheck();
@@ -182,10 +191,12 @@ namespace CharacterComponent
                 0.2f);
         }
 
+        
+        
         private void OnMove()
         {
             var targetSpeed = inputEventHandler.IsRun ? runSpeed : walkSpeed;
-            var moveVector = inputEventHandler.MoveValue;
+            var moveVector = lastMoveVector = inputEventHandler.MoveValue;
             
             if ( moveVector == Vector2.zero)
                 targetSpeed = 0f;
@@ -247,6 +258,45 @@ namespace CharacterComponent
             
             // update animator if using character
             animator.SetFloat(_movementSpeedAnimationID, _animationBlend);
+        }
+
+        private void OnMoveForRolling()
+        {
+             var targetSpeed = 10f;
+            var moveVector = transform.forward;
+            
+            if ( moveVector == Vector3.zero)
+                targetSpeed = 0f;
+            
+            const float speedOffset = 0.1f;
+
+            var velocity = characterController.velocity;
+            var currentHorizontalSpeed = 
+                new Vector3(velocity.x, 0.0f, velocity.z).magnitude;
+            
+            // accelerate or decelerate to target speed
+            if (currentHorizontalSpeed < targetSpeed - speedOffset ||
+                currentHorizontalSpeed > targetSpeed + speedOffset)
+            {
+                // creates curved result rather than a linear one giving a more organic speed change
+                // note T in Lerp is clamped, so we don't need to clamp our speed
+                _rollingSpeed = Mathf.Lerp(currentHorizontalSpeed, targetSpeed, Time.deltaTime * SpeedChangeRate);
+            
+                // round speed to 3 decimal places
+                _rollingSpeed = Mathf.Round(_rollingSpeed * 1000f) / 1000f;
+            }
+            else
+            {
+                _rollingSpeed = targetSpeed;
+            }
+            
+            // normalise input direction
+            var targetDirection = Quaternion.Euler(0.0f, transform.eulerAngles.y, 0.0f) * Vector3.forward;
+            
+            // move the player
+            characterController.Move(
+                targetDirection.normalized * (_rollingSpeed * Time.deltaTime) + 
+                new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime);
         }
 
         private void SetStopMove()
@@ -329,17 +379,14 @@ namespace CharacterComponent
         private void OnRollingStart()
         {
             SetStopMove();
-            
-            // move forward
-            var rollSpeed = 1f;
-            var forward = transform.TransformDirection(Vector3.forward);
-            characterController.Move(forward * rollSpeed);
-            
+
+            _rollingSpeed = 0f;
             _isRolling = true;
         }
 
         private void OnRollingFinish()
         {
+            SetStopMove();
             _isRolling = false;
         }
     }
