@@ -1,153 +1,172 @@
+
 using UnityEngine;
-using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 namespace CharacterComponent
 {
-    [RequireComponent(typeof(CharacterController))]
-    [RequireComponent(typeof(Animator))]
-    [RequireComponent(typeof(InputEventHandler))]
-    public class GamePlayer : MonoBehaviour
+    public partial class GamePlayer
     {
         [SerializeField] private Animator animator;
+        
         [SerializeField] private InputEventHandler inputEventHandler;
+        
         [SerializeField] private CharacterController characterController;
         
-        private const float RotationSmoothTime = 0.12f;
-        private const float SpeedChangeRate = 10f;
-        private const float TerminalVelocity = 53.0f;
-        
-        private readonly int movementSpeedAnimationID = Animator.StringToHash("MovementSpeed");
-        private readonly int JumpAnimationID = Animator.StringToHash("Jump");
-        private readonly int GroundAnimationID = Animator.StringToHash("IsGround");
-        private readonly int AttackingAnimationID = Animator.StringToHash("Attack");
-        private readonly int FallingAnimationID = Animator.StringToHash("Falling");
-       
-        private GameObject mainCamera;
-        
-        private float rotationVelocity;
-        private float targetRotation;
-        private float movementSpeed;
-        private float animationBlend;
-        private float verticalVelocity;
-        
-        private float jumpTimeoutDelta;
-        private float fallTimeoutDelta;
-
-        private bool isGrounded;
-        private bool isJumping;
-        private bool isAttacking;
+        [SerializeField] private Weapon weapon;
         
         [Tooltip("Useful for rough ground")]
-        public float GroundedOffset = -0.18f;
+        [SerializeField] private float groundedOffset = 0.15f;
         
         [Space(10)]
         [Tooltip("")]
         [Range(0.0f, 10f)]
-        public float WalkSpeed = 5f;
+        [SerializeField] private float walkSpeed = 5f;
         
+        [FormerlySerializedAs("RunSpeed")]
         [Tooltip("")]
         [Range(0.0f, 20f)]
-        public float RunSpeed = 10f;
+        [SerializeField] private float runSpeed = 10f;
         
+        [FormerlySerializedAs("JumpTimeout")]
         [Space(10)]
         [Tooltip("Time required to pass before being able to jump again. Set to 0f to instantly jump again")]
-        public float JumpTimeout = 0.45f;
+        [SerializeField] private float jumpTimeout = 0.45f;
 
-        [Tooltip("Time required to pass before entering the fall state. Useful for walking down stairs")]
-        public float FallTimeout = 0.15f;
+        [FormerlySerializedAs("FallTimeout")] [Tooltip("Time required to pass before entering the fall state. Useful for walking down stairs")]
+        [SerializeField] private float fallTimeout = 0.15f;
         
-        [Tooltip("The character uses its own gravity value. The engine default is -9.81f")]
-        public float Gravity = -17.0f;
+        [FormerlySerializedAs("Gravity")] [Tooltip("The character uses its own gravity value. The engine default is -9.81f")]
+        [SerializeField] private float gravity = -17.0f;
         
+        [FormerlySerializedAs("JumpHeight")]
         [Space(10)]
         [Tooltip("The height the player can jump")]
-        public float JumpHeight = 1.0f;
+        [SerializeField] private float jumpHeight = 1.0f;
+    }
+    
+    [RequireComponent(typeof(CharacterController))]
+    [RequireComponent(typeof(Animator))]
+    [RequireComponent(typeof(InputEventHandler))]
+    public partial class GamePlayer : MonoBehaviour
+    {
+        private const float RotationSmoothTime = 0.12f;
+        private const float SpeedChangeRate = 10f;
+        private const float TerminalVelocity = 53.0f;
+        private const int MaxAttackCombo = 2;
+        
+        private readonly int _movementSpeedAnimationID = Animator.StringToHash("MovementSpeed");
+        private readonly int _jumpAnimationID = Animator.StringToHash("Jump");
+        private readonly int _groundAnimationID = Animator.StringToHash("IsGround");
+        private readonly int _attackingAnimationID = Animator.StringToHash("Attack");
+        private readonly int _attackComboAnimationID = Animator.StringToHash("AttackCombo");
+        private readonly int _rollingAnimationID = Animator.StringToHash("Rolling");
+        private readonly int _fallingAnimationID = Animator.StringToHash("Falling");
+        
+        private GameObject _mainCamera;
+        
+        private float _rotationVelocity;
+        private float _targetRotation;
+        private float _movementSpeed;
+        private float _animationBlend;
+        private float _verticalVelocity;
+        
+        private float _jumpTimeoutDelta;
+        private float _fallTimeoutDelta;
+
+        private bool _isGrounded;
+        private bool _isJumping;
+        private bool _isAttacking;
+        private bool _isRolling;
+        
+        private int _attackCombo;
         
         private void Awake()
         {
-            if (mainCamera == null)
-                mainCamera = GameObject.FindGameObjectWithTag("MainCamera");
+            if (_mainCamera == null)
+                _mainCamera = GameObject.FindGameObjectWithTag("MainCamera");
+
+            inputEventHandler.OnAttackEvent = OnAttack;
+            inputEventHandler.OnJumpEvent = OnJump;
+            inputEventHandler.OnRollingEvent = OnRolling;
         }
         
         private void FixedUpdate()
         {
-            if (isAttacking)
+            if (_isAttacking || _isRolling)
                 return;
             
             JumpAndGravity();
-            
             GroundedCheck();
-
             OnMove();
         }
         
         private void JumpAndGravity()
         {
-            if (isGrounded)
+            if (_isGrounded)
             {
                 // reset the fall timeout timer
-                fallTimeoutDelta = FallTimeout;
+                _fallTimeoutDelta = fallTimeout;
 
                 // update animator if using character
-                animator.SetBool(JumpAnimationID, false);
-                animator.SetBool(FallingAnimationID, false);
+                animator.SetBool(_jumpAnimationID, false);
+                // animator.SetBool(_fallingAnimationID, false);
 
                 // stop our velocity dropping infinitely when grounded
-                if (verticalVelocity < 0.0f)
+                if (_verticalVelocity < 0.0f)
                 {
-                    verticalVelocity = -2f;
+                    _verticalVelocity = -2f;
                 }
 
                 // Jump
-                if (isJumping && jumpTimeoutDelta <= 0.0f)
+                if (_isJumping && _jumpTimeoutDelta <= 0.0f) 
                 {
                     // the square root of H * -2 * G = how much velocity needed to reach desired height
-                    verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * Gravity);
+                    _verticalVelocity = Mathf.Sqrt(jumpHeight * -2f * gravity);
 
                     // update animator if using character
-                    animator.SetBool(JumpAnimationID, true);
+                    animator.SetBool(_jumpAnimationID, true);
                 }
 
                 // jump timeout
-                if (jumpTimeoutDelta >= 0.0f)
+                if (_jumpTimeoutDelta >= 0.0f)
                 {
-                    jumpTimeoutDelta -= Time.deltaTime;
+                    _jumpTimeoutDelta -= Time.deltaTime;
                 }
             }
             else
             {
                 // reset the jump timeout timer
-                jumpTimeoutDelta = JumpTimeout;
+                _jumpTimeoutDelta = jumpTimeout;
 
                 // fall timeout
-                if (fallTimeoutDelta >= 0.0f)
+                if (_fallTimeoutDelta >= 0.0f)
                 {
-                    fallTimeoutDelta -= Time.deltaTime;
+                    _fallTimeoutDelta -= Time.deltaTime;
                 }
                 else
                 {
                     // update animator if using character
-                    animator.SetBool(FallingAnimationID, true);
+                    // animator.SetBool(_fallingAnimationID, true);
                 }
 
                 // if we are not grounded, do not jump
-                isJumping = false;
+                _isJumping = false;
             }
 
             // apply gravity over time if under terminal (multiply by delta time twice to linearly speed up over time)
-            if (verticalVelocity < TerminalVelocity)
+            if (_verticalVelocity < TerminalVelocity)
             {
-                verticalVelocity += Gravity * Time.deltaTime;
+                _verticalVelocity += gravity * Time.deltaTime;
             }
         }
 
         private void GroundedCheck()
         {
             // set sphere position, with offset
-            var spherePosition = new Vector3(transform.position.x, transform.position.y - GroundedOffset, transform.position.z);
-            isGrounded = Physics.CheckSphere(spherePosition, 0.2f, LayerMask.GetMask("Default"));
+            var spherePosition = new Vector3(transform.position.x, transform.position.y - groundedOffset, transform.position.z);
+            _isGrounded = Physics.CheckSphere(spherePosition, 0.2f, LayerMask.GetMask("Default"));
 
-            animator.SetBool(GroundAnimationID, isGrounded);
+            animator.SetBool(_groundAnimationID, _isGrounded);
         }
         
         private void OnDrawGizmosSelected()
@@ -155,17 +174,17 @@ namespace CharacterComponent
             var transparentGreen = new Color(0.0f, 1.0f, 0.0f, 0.35f);
             var transparentRed = new Color(1.0f, 0.0f, 0.0f, 0.35f);
 
-            Gizmos.color = isGrounded ? transparentGreen : transparentRed;
+            Gizmos.color = _isGrounded ? transparentGreen : transparentRed;
 
             // when selected, draw a gizmo in the position of, and matching radius of, the grounded collider
             Gizmos.DrawSphere(
-                new Vector3(transform.position.x, transform.position.y - GroundedOffset, transform.position.z),
+                new Vector3(transform.position.x, transform.position.y - groundedOffset, transform.position.z),
                 0.2f);
         }
 
         private void OnMove()
         {
-            var targetSpeed = inputEventHandler.IsRun ? RunSpeed : WalkSpeed;
+            var targetSpeed = inputEventHandler.IsRun ? runSpeed : walkSpeed;
             var moveVector = inputEventHandler.MoveValue;
             
             if ( moveVector == Vector2.zero)
@@ -187,21 +206,21 @@ namespace CharacterComponent
             {
                 // creates curved result rather than a linear one giving a more organic speed change
                 // note T in Lerp is clamped, so we don't need to clamp our speed
-                movementSpeed = Mathf.Lerp(currentHorizontalSpeed, targetSpeed * inputMagnitude,
+                _movementSpeed = Mathf.Lerp(currentHorizontalSpeed, targetSpeed * inputMagnitude,
                     Time.deltaTime * SpeedChangeRate);
             
                 // round speed to 3 decimal places
-                movementSpeed = Mathf.Round(movementSpeed * 1000f) / 1000f;
+                _movementSpeed = Mathf.Round(_movementSpeed * 1000f) / 1000f;
             }
             else
             {
-                movementSpeed = targetSpeed;
+                _movementSpeed = targetSpeed;
             }
             
-            animationBlend = Mathf.Lerp(animationBlend, targetSpeed, Time.deltaTime * SpeedChangeRate);
+            _animationBlend = Mathf.Lerp(_animationBlend, targetSpeed, Time.deltaTime * SpeedChangeRate);
             
-            if (animationBlend < 0.01f) 
-                animationBlend = 0f;
+            if (_animationBlend < 0.01f) 
+                _animationBlend = 0f;
             
             // normalise input direction
             var inputDirection = new Vector3(moveVector.x, 0.0f, moveVector.y).normalized;
@@ -210,8 +229,8 @@ namespace CharacterComponent
             // if there is a move input rotate player when the player is moving
             if (moveVector != Vector2.zero)
             {
-                targetRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + mainCamera.transform.eulerAngles.y;
-                var rotation = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetRotation, ref rotationVelocity,
+                _targetRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + _mainCamera.transform.eulerAngles.y;
+                var rotation = Mathf.SmoothDampAngle(transform.eulerAngles.y, _targetRotation, ref _rotationVelocity,
                     RotationSmoothTime);
             
                 // rotate to face input direction relative to camera position
@@ -219,38 +238,109 @@ namespace CharacterComponent
             }
             
             
-            var targetDirection = Quaternion.Euler(0.0f, targetRotation, 0.0f) * Vector3.forward;
+            var targetDirection = Quaternion.Euler(0.0f, _targetRotation, 0.0f) * Vector3.forward;
             
             // move the player
             characterController.Move(
-                targetDirection.normalized * (movementSpeed * Time.deltaTime) + 
-                new Vector3(0.0f, verticalVelocity, 0.0f) * Time.deltaTime);
+                targetDirection.normalized * (_movementSpeed * Time.deltaTime) + 
+                new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime);
             
             // update animator if using character
-            animator.SetFloat(movementSpeedAnimationID, animationBlend);
+            animator.SetFloat(_movementSpeedAnimationID, _animationBlend);
+        }
+
+        private void SetStopMove()
+        {
+            _movementSpeed = 0f;
+            _animationBlend = 0f;
+            animator.SetFloat(_movementSpeedAnimationID, _animationBlend);
+            characterController.SimpleMove(Vector3.zero);
         }
         
-        
-
-        private void OnAttackStart()
+        private void OnAttack()
         {
-            Debug.Log("OnAttackStart");
-            isAttacking = true;
-        }
-
-        private void OnAttackFinish()
-        {
-            Debug.Log("OnAttackFinish");
-            isAttacking = false;
-        }
-
-        private void OnAttack(InputAction.CallbackContext context)
-        {
-            if (isAttacking)
+            if (!_isGrounded)
                 return;
             
-            isAttacking = true;
-            animator.SetTrigger(AttackingAnimationID);
+            if (_isAttacking)
+                return;
+
+            SetStopMove();
+            
+            if (_attackCombo == MaxAttackCombo)
+                _attackCombo = 0;
+
+            animator.SetInteger(_attackComboAnimationID, ++_attackCombo);
+            animator.SetTrigger(_attackingAnimationID);
+        }
+        
+        private void OnJump()
+        {
+            if (_isAttacking)
+                return;
+            
+            _isJumping = true;
+        }
+
+        private void OnRolling()
+        {
+            if (_isAttacking)
+                return;
+
+            animator.SetTrigger(_rollingAnimationID);
+        }
+        
+        /// <summary>
+        /// Call when start to attack motion in animation event
+        /// </summary>
+        private void OnAttackStart()
+        {
+            //Debug.Log("OnAttackStart");
+            _isAttacking = true;
+        }
+        
+        /// <summary>
+        /// Call when start to attack event in animation event
+        /// </summary>
+        private void OnAttackEventStart()
+        {
+            //Debug.Log("OnAttackEventStart");
+            weapon.SetAbleEvent(true);
+        }
+
+        /// <summary>
+        /// Call when finished to attack event in animation event
+        /// </summary>
+        private void OnAttackEventFinish()
+        {
+            //Debug.Log("OnAttackEventFinish");
+            weapon.SetAbleEvent(false);
+        }
+
+        /// <summary>
+        /// Call when finished to attack motion in animation event
+        /// </summary>
+        private void OnAttackFinish()
+        {
+            //Debug.Log("OnAttackFinish");
+            _isAttacking = false;
+        }
+
+        private void OnRollingStart()
+        {
+            SetStopMove();
+            
+            // move forward
+            var rollSpeed = 1f;
+            var forward = transform.TransformDirection(Vector3.forward);
+            characterController.Move(forward * rollSpeed);
+            
+            _isRolling = true;
+        }
+
+        private void OnRollingFinish()
+        {
+            _isRolling = false;
         }
     }
 }

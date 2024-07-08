@@ -70,7 +70,21 @@ ModelImporter:
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
+      - time: 0.25821596
+        functionName: OnAttackEventStart
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
       - time: 0.6127451
+        functionName: OnAttackEventFinish
+        data: 
+        objectReferenceParameter: {instanceID: 0}
+        floatParameter: 0
+        intParameter: 0
+        messageOptions: 0
+      - time: 0.7899159
         functionName: OnAttackFinish
         data: 
         objectReferenceParameter: {instanceID: 0}
