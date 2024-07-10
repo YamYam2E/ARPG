@@ -1,4 +1,6 @@
 
+using System;
+using CharacterComponent.CharacterAction;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -49,7 +51,10 @@ namespace CharacterComponent
     [RequireComponent(typeof(InputEventHandler))]
     public partial class GamePlayer : MonoBehaviour
     {
-        private const float RotationSmoothTime = 0.12f;
+        /// <summary>
+        /// 값이 높아질수록 이동 방향에 맞춘 캐릭터 회전이 느려진다.
+        /// </summary>
+        private const float RotationSmoothTime = 0.1f;
         private const float SpeedChangeRate = 10f;
         private const float TerminalVelocity = 53.0f;
         private const int MaxAttackCombo = 2;
@@ -66,7 +71,7 @@ namespace CharacterComponent
         
         private float _rotationVelocity;
         private float _targetRotation;
-        private float _rollingSpeed;
+        
         private float _movementSpeed;
         private float _animationBlend;
         private float _verticalVelocity;
@@ -80,32 +85,36 @@ namespace CharacterComponent
         private bool _isRolling;
         
         private int _attackCombo;
-        
-        private Vector2 lastMoveVector;
+
+        private RollingAction _rollingAction;
         
         private void Awake()
         {
             if (_mainCamera == null)
                 _mainCamera = GameObject.FindGameObjectWithTag("MainCamera");
 
+            if (_rollingAction == null)
+            {
+                _rollingAction = gameObject.AddComponent<RollingAction>();
+                _rollingAction.Initialize(characterController);
+            }
+            
             inputEventHandler.OnAttackEvent = OnAttack;
             inputEventHandler.OnJumpEvent = OnJump;
             inputEventHandler.OnRollingEvent = OnRolling;
         }
         
-        private void FixedUpdate()
+        private void OnAnimatorMove()
         {
             if (_isAttacking)
                 return;
 
-            if (_isRolling)
-            {
-                OnMoveForRolling();
+            if (_rollingAction.IsRolling)
                 return;
-            }
             
             JumpAndGravity();
             GroundedCheck();
+            
             OnMove();
         }
         
@@ -190,13 +199,11 @@ namespace CharacterComponent
                 new Vector3(transform.position.x, transform.position.y - groundedOffset, transform.position.z),
                 0.2f);
         }
-
-        
         
         private void OnMove()
         {
             var targetSpeed = inputEventHandler.IsRun ? runSpeed : walkSpeed;
-            var moveVector = lastMoveVector = inputEventHandler.MoveValue;
+            var moveVector = inputEventHandler.MoveValue;
             
             if ( moveVector == Vector2.zero)
                 targetSpeed = 0f;
@@ -248,7 +255,6 @@ namespace CharacterComponent
                 transform.rotation = Quaternion.Euler(0.0f, rotation, 0.0f);
             }
             
-            
             var targetDirection = Quaternion.Euler(0.0f, _targetRotation, 0.0f) * Vector3.forward;
             
             // move the player
@@ -258,45 +264,6 @@ namespace CharacterComponent
             
             // update animator if using character
             animator.SetFloat(_movementSpeedAnimationID, _animationBlend);
-        }
-
-        private void OnMoveForRolling()
-        {
-             var targetSpeed = 10f;
-            var moveVector = transform.forward;
-            
-            if ( moveVector == Vector3.zero)
-                targetSpeed = 0f;
-            
-            const float speedOffset = 0.1f;
-
-            var velocity = characterController.velocity;
-            var currentHorizontalSpeed = 
-                new Vector3(velocity.x, 0.0f, velocity.z).magnitude;
-            
-            // accelerate or decelerate to target speed
-            if (currentHorizontalSpeed < targetSpeed - speedOffset ||
-                currentHorizontalSpeed > targetSpeed + speedOffset)
-            {
-                // creates curved result rather than a linear one giving a more organic speed change
-                // note T in Lerp is clamped, so we don't need to clamp our speed
-                _rollingSpeed = Mathf.Lerp(currentHorizontalSpeed, targetSpeed, Time.deltaTime * SpeedChangeRate);
-            
-                // round speed to 3 decimal places
-                _rollingSpeed = Mathf.Round(_rollingSpeed * 1000f) / 1000f;
-            }
-            else
-            {
-                _rollingSpeed = targetSpeed;
-            }
-            
-            // normalise input direction
-            var targetDirection = Quaternion.Euler(0.0f, transform.eulerAngles.y, 0.0f) * Vector3.forward;
-            
-            // move the player
-            characterController.Move(
-                targetDirection.normalized * (_rollingSpeed * Time.deltaTime) + 
-                new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime);
         }
 
         private void SetStopMove()
@@ -334,9 +301,14 @@ namespace CharacterComponent
 
         private void OnRolling()
         {
-            if (_isAttacking)
+            if ( _isAttacking || _jumpTimeoutDelta > 0f )
                 return;
 
+            if (_rollingAction.IsRolling)
+                return;
+            
+            SetStopMove();
+            
             animator.SetTrigger(_rollingAnimationID);
         }
         
@@ -374,20 +346,6 @@ namespace CharacterComponent
         {
             //Debug.Log("OnAttackFinish");
             _isAttacking = false;
-        }
-
-        private void OnRollingStart()
-        {
-            SetStopMove();
-
-            _rollingSpeed = 0f;
-            _isRolling = true;
-        }
-
-        private void OnRollingFinish()
-        {
-            SetStopMove();
-            _isRolling = false;
         }
     }
 }

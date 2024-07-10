@@ -38,7 +38,7 @@ namespace CharacterComponent
         /// Event for rolling action
         /// </summary>
         public Action OnRollingEvent;
-    
+
         /// <summary>
         /// Property to get the move value
         /// </summary>
@@ -73,7 +73,7 @@ namespace CharacterComponent
             actionAsset.FindActionMap("gameplay").FindAction("attack").performed += OnAttack;
             actionAsset.FindActionMap("gameplay").FindAction("rolling").performed += OnRolling;
         }
-    
+
         /// <summary>
         /// This function is called when jump
         /// </summary>
