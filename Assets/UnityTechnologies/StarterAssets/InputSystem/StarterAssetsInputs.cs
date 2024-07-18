@@ -1,9 +1,7 @@
 using UnityEngine;
-#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
-#endif
 
-namespace StarterAssets
+namespace UnityTechnologies.StarterAssets.InputSystem
 {
 	public class StarterAssetsInputs : MonoBehaviour
 	{

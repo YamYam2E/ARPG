@@ -27,7 +27,7 @@ namespace CharacterComponent
         [FormerlySerializedAs("RunSpeed")]
         [Tooltip("")]
         [Range(0.0f, 20f)]
-        [SerializeField] private float runSpeed = 10f;
+        [SerializeField] private float runSpeed = 7f;
         
         [FormerlySerializedAs("JumpTimeout")]
         [Space(10)]
